@@ -126,6 +126,18 @@ st.set_page_config(
 
 st.title("PaperMind")
 
+with st.sidebar:
+	st.header("Settings")
+	if st.button(label="Reset Conversation"):
+		st.session_state["messages"] = [
+			{
+				"role": "system",
+				"content": INSTRUCTIONS
+			}
+		]
+		st.session_state["display_messages"] = []
+		st.rerun()
+
 uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
 if uploaded_file:
