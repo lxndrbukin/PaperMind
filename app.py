@@ -1,8 +1,9 @@
 import fitz
+import os
+import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -31,3 +32,46 @@ def embed_chunks(chunks):
         input=chunks
     )
     return [item.embedding for item in response.data]
+
+def store(chunks, embeddings):
+	result = []
+	for idx, chunk in enumerate(chunks):
+		result.append({
+			"chunk": chunk,
+			"embedding": embeddings[idx]
+		})
+	return result
+
+def retrieve(query, stored_chunks):
+	scores = []
+	response = client.embeddings.create(
+			model="text-embedding-3-small",
+			input=[query]
+	)
+	query_embedding = response.data[0].embedding
+	for chunk in stored_chunks:
+		similarity = np.dot(query_embedding, chunk["embedding"]) / (np.linalg.norm(query_embedding) * np.linalg.norm(chunk["embedding"]))
+		scores.append({
+			"chunk": chunk,
+			"score": similarity
+		})
+	return sorted(scores, key=lambda x: x["score"], reverse=True)[:3]
+
+def generate(query, retrieved_chunks):
+	text = ""
+	for retrieved_chunk in retrieved_chunks:
+		text += retrieved_chunk["chunk"]["chunk"]
+	response = client.chat.completions.create(
+		model="gpt-4o-mini",
+		messages=[
+			{
+				"role": "system",
+				"content": "Answer the user's query only using the provided context"
+			},
+			{
+				"role": "user",
+				"content": f"Context: {text}\nUser query: {query}"
+			}
+		]
+	)
+	return response.choices[0].message.content
