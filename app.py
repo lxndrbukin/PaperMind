@@ -95,6 +95,12 @@ def generate(query, retrieved_chunks):
 
 	return answer
 
+st.set_page_config(
+    page_title="PaperMind",
+    page_icon="🧠",
+    layout="centered"
+)
+
 st.title("PaperMind")
 
 uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
