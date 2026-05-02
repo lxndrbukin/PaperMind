@@ -4,12 +4,24 @@ import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from dotenv import load_dotenv
+import streamlit as st
 
 load_dotenv()
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 
 client = OpenAI(api_key=API_KEY)
+
+if "messages" not in st.session_state:
+    st.session_state["messages"] = [
+        {
+            "role": "system",
+            "content": "Answer the user's query only using the provided context"
+        }
+    ]
+
+if "display_messages" not in st.session_state:
+    st.session_state["display_messages"] = []
 
 def parse_pdf(file):
 	text = ""
@@ -61,17 +73,50 @@ def generate(query, retrieved_chunks):
 	text = ""
 	for retrieved_chunk in retrieved_chunks:
 		text += retrieved_chunk["chunk"]["chunk"]
+
+	st.session_state["messages"].append({
+		"role": "user",
+		"content": f"Context: {text}\nUser query: {query}"
+	})
 	response = client.chat.completions.create(
 		model="gpt-4o-mini",
-		messages=[
-			{
-				"role": "system",
-				"content": "Answer the user's query only using the provided context"
-			},
-			{
-				"role": "user",
-				"content": f"Context: {text}\nUser query: {query}"
-			}
-		]
+		messages=st.session_state["messages"]
 	)
-	return response.choices[0].message.content
+	
+	answer = response.choices[0].message.content
+		
+	st.session_state["messages"].append({
+        "role": "assistant",
+        "content": answer
+    })
+	
+	st.session_state["display_messages"].append({"role": "user", "content": query})
+	st.session_state["display_messages"].append({"role": "assistant", "content": answer})
+
+	return answer
+
+st.title("PaperMind")
+
+uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
+
+if uploaded_file:
+	with st.spinner("Processing PDF..."):
+		text = parse_pdf(uploaded_file)
+		chunks = chunk_text(text)
+		embeddings = embed_chunks(chunks)
+		st.session_state["stored_chunks"] = store(chunks, embeddings)
+	st.write("File uploaded")
+
+question = st.chat_input("Ask a question")
+
+if question:
+	if "stored_chunks" not in st.session_state:
+		st.warning("Please upload a PDF first.")
+	else:
+		with st.spinner("Thinking..."):
+			retrieved = retrieve(question, st.session_state["stored_chunks"])
+			generate(question, retrieved)
+
+for msg in st.session_state.get("display_messages", []):
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
